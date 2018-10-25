@@ -1,5 +1,5 @@
 {
-	"name" : "adodb/adodb-php",
+	"name" : "curvedental/adodb-php",
 	"description" : "ADOdb is a PHP database abstraction layer library",
 	"license" : [ "BSD-3-Clause", "LGPL-2.1-or-later" ],
 	"authors" : [
@@ -22,8 +22,8 @@
 
 	"homepage": "http://adodb.org/",
 	"support" : {
-		"issues" : "https://github.com/ADOdb/ADOdb/issues",
-		"source" : "https://github.com/ADOdb/ADOdb"
+		"issues" : "https://github.com/curvedental/ADOdb/issues",
+		"source" : "https://github.com/curvedental/ADOdb"
 	},
 
 	"require" : {
