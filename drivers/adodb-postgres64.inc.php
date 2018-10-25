@@ -839,6 +839,83 @@ class ADODB_postgres64 extends ADOConnection{
 		return $rez;
 	}
 
+	function ExecuteAsync($sql, $bindings = null)
+	{
+		$this->_errorMsg = false;
+		$this->_asyncSql = $sql;
+
+		if (is_array($bindings)) {
+			// convert ? in $sql to use $1, $2 etc that postgres uses
+			$i = 0;
+			$sql = preg_replace_callback('/\?/', function () use (&$i) {
+				++$i;
+				return '$' . $i;
+			}, $sql);
+
+			$success = pg_send_query_params($this->_connectionID, $sql, $bindings);
+		} else {
+			$success = pg_send_query($this->_connectionID, $sql);
+		}
+
+		return $success;
+	}
+
+	function IsConnectionBusy()
+	{
+		return pg_connection_busy($this->_connectionID);
+	}
+
+	function CancelAsyncQuery()
+	{
+		return pg_cancel_query($this->_connectionID);
+	}
+
+	function GetAsyncResult()
+	{
+		$result = pg_get_result($this->_connectionID);
+
+		// flush any pending erroneous results
+		// see http://php.net/manual/en/function.pg-get-result.php#117984
+		while (pg_get_result($this->_connectionID)) {
+		}
+
+		if ($this->ErrorNo() !== 0) {
+			return null;
+		}
+
+		// check if no data returned, then no need to create real recordset
+		if ($result && pg_numfields($result) <= 0) {
+			if (is_resource($this->_resultid) && get_resource_type($this->_resultid) === 'pgsql result') {
+				pg_freeresult($this->_resultid);
+			}
+			$this->_resultid = $result;
+			$this->_queryID = true;
+			return new ADORecordSet_empty();
+		}
+
+		$this->_queryID = $result;
+
+		// copied from ADOConnection::_Execute
+		$rsclass = $this->rsPrefix.$this->databaseType;
+		$rs = new $rsclass($this->_queryID, $this->fetchMode);
+		$rs->connection = &$this;
+		$rs->Init();
+		if (is_array($this->_asyncSql)) $rs->sql = $this->_asyncSql[0];
+		else $rs->sql = $this->_asyncSql;
+		if ($rs->_numOfRows <= 0) {
+			global $ADODB_COUNTRECS;
+			if ($ADODB_COUNTRECS) {
+				if (!$rs->EOF) {
+					$rs = &$this->_rs2rs($rs,-1,-1,!is_array($this->_asyncSql));
+					$rs->_queryID = $this->_queryID;
+				} else {
+					$rs->_numOfRows = 0;
+				}
+			}
+		}
+		return $rs;
+	}
+
 	function _errconnect()
 	{
 		if (defined('DB_ERROR_CONNECT_FAILED')) return DB_ERROR_CONNECT_FAILED;
