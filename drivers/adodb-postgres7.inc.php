@@ -24,6 +24,18 @@ class ADODB_postgres7 extends ADODB_postgres64 {
 	var $ansiOuter = true;
 	var $charSet = true; //set to true for Postgres 7 and above - PG client supports encodings
 
+	// HERO-47801 The metaColumnsSQL query introduced in ADOdb 5 is slow when pg_catalog is large as it is in Hero's
+	// production environment.  The query below is copied from the previous version of ADOdb and gives acceptable
+	// performance
+	var $fastMetaColumnsSQL = "
+SELECT a.attname, t.typname, a.attlen, a.atttypmod, a.attnotnull, a.atthasdef, a.attnum
+FROM pg_class c, pg_attribute a, pg_type t, pg_namespace n
+WHERE relkind in ('r','v') AND (c.relname='%s' or c.relname = lower('%s'))
+ and c.relnamespace=n.oid and n.nspname=CURRENT_SCHEMA
+and a.attname not like '....%%' AND a.attnum > 0
+AND a.atttypid = t.oid AND a.attrelid = c.oid ORDER BY a.attnum;
+	";
+
 	// Richard 3/18/2012 - Modified SQL to return SERIAL type correctly AS old driver no longer return SERIAL as data type.
 	var $metaColumnsSQL = "
 		SELECT
@@ -144,7 +156,7 @@ class ADODB_postgres7 extends ADODB_postgres64 {
 			return sprintf($this->metaColumnsSQL1, $table, $table, $table, $schema);
 		}
 		else {
-			return sprintf($this->metaColumnsSQL, $table, $table, $schema);
+			return sprintf($this->fastMetaColumnsSQL, $table, $table);
 		}
 	}
 
@@ -254,6 +266,13 @@ class ADODB_postgres7 extends ADODB_postgres64 {
 				$i++;
 			}
 
+			// PHP converts false boolean values to empty strings which generate errors executing
+			// parameterized queries. Explicitly convert them to 't' or 'f'
+			for($j = 0; $j < count($inputarr); ++$j) {
+				if (is_bool($inputarr[$j])) {
+				    $inputarr[$j] = $inputarr[$j] ? 't' : 'f';
+				}
+			}
 			$rez = pg_query_params($this->_connectionID,$sql, $inputarr);
 		} else {
 			$rez = pg_query($this->_connectionID,$sql);

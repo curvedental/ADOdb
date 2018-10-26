@@ -513,6 +513,8 @@ if (!defined('_ADODB_LAYER')) {
 	var $transOff = 0;			/// temporarily disable transactions
 	var $transCnt = 0;			/// count of nested transactions
 
+	private $transCommitted = false; /// flag used in integration tests to indicate when a test polluted the database
+
 	var $fetchMode=false;
 
 	var $null2null = 'null'; // in autoexecute/getinsertsql/getupdatesql, this value will be converted to a null
@@ -1040,6 +1042,18 @@ if (!defined('_ADODB_LAYER')) {
 		return false;
 	}
 
+	/**
+	 * Used solely in tests to check if the transaction has been committed. This will be true
+	 * when the outer most transaction has been committed to the database. In the case of our tests,
+	 * this would mean that test data added will live beyond that test unless manually removed.
+	 *
+	 * @return boolean true if committed, false if not.
+	 * @see StartTrans()
+	 * @see CompleteTrans()
+	 */
+	public function isTestTransactionCommitted() {
+		return $this->transCommitted;
+	}
 
 	function IgnoreErrors($saveErrs=false) {
 		if (!$saveErrs) {
@@ -1071,6 +1085,7 @@ if (!defined('_ADODB_LAYER')) {
 		$this->_oldRaiseFn = $this->raiseErrorFn;
 		$this->raiseErrorFn = $errfn;
 		$this->_transOK = true;
+		$this->transCommitted = false;
 
 		if ($this->debug && $this->transCnt > 0) {
 			ADOConnection::outp("Bad Transaction: StartTrans called within BeginTrans");
@@ -1107,6 +1122,9 @@ if (!defined('_ADODB_LAYER')) {
 				if ($this->debug) {
 					ADOConnection::outp("Smart Commit occurred");
 				}
+				// By this point, all the inner transactions have been "Completed" and the final outer
+				// one has been committed. This exists for tests to check the state of the commit.
+				$this->transCommitted = true;
 			}
 		} else {
 			$this->_transOK = false;
